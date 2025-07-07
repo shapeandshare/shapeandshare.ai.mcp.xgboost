@@ -17,6 +17,10 @@ ports:
   - port: 8443:443
     nodeFilters:
       - loadbalancer
+  - port: 30080:30080
+    nodeFilters:
+      - server:*
+      - agent:*
 options:
   k3d:
     wait: true

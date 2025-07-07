@@ -74,7 +74,11 @@ dev-setup: ## Create development infrastructure (k3d + Istio + Dashboard + names
 	@$(call print_dev_status,$(BLUE),🕸️  Step 2/5: Installing Istio service mesh...)
 	@$(call install_istioctl)
 	@$(call print_dev_status,$(BLUE),🔧 Installing Istio $(ISTIO_VERSION)...)
-	@ISTIOCTL_CMD=$(call get_istioctl_cmd); $$ISTIOCTL_CMD install --set values.global.istioNamespace=istio-system --filename k8s/istio-config.yaml --skip-confirmation --quiet
+	@if [ -f ./istioctl ]; then \
+		./istioctl install --set values.global.istioNamespace=istio-system --filename k8s/istio-config.yaml --skip-confirmation --quiet; \
+	else \
+		istioctl install --set values.global.istioNamespace=istio-system --filename k8s/istio-config.yaml --skip-confirmation --quiet; \
+	fi
 	@$(call print_dev_status,$(BLUE),⏳ Waiting for Istio control plane...)
 	@kubectl wait --for=condition=ready pod -l app=istiod -n istio-system --timeout=300s >/dev/null 2>&1
 	@$(call print_dev_status,$(GREEN),✅ Istio service mesh installed!)

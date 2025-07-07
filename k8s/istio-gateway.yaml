@@ -1,0 +1,89 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: mcp-xgboost-gateway
+  namespace: mcp-xgboost
+  labels:
+    app.kubernetes.io/name: mcp-xgboost
+    app.kubernetes.io/instance: mcp-xgboost
+    app.kubernetes.io/component: gateway
+spec:
+  selector:
+    istio: ingressgateway # use Istio default controller
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: mcp-xgboost-vs
+  namespace: mcp-xgboost
+  labels:
+    app.kubernetes.io/name: mcp-xgboost
+    app.kubernetes.io/instance: mcp-xgboost
+    app.kubernetes.io/component: virtualservice
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - mcp-xgboost-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /health
+    route:
+    - destination:
+        host: mcp-xgboost.mcp-xgboost.svc.cluster.local
+        port:
+          number: 8000
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: mcp-xgboost.mcp-xgboost.svc.cluster.local
+        port:
+          number: 8000
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: mcp-xgboost-dr
+  namespace: mcp-xgboost
+  labels:
+    app.kubernetes.io/name: mcp-xgboost
+    app.kubernetes.io/instance: mcp-xgboost
+    app.kubernetes.io/component: destinationrule
+spec:
+  host: mcp-xgboost.mcp-xgboost.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 10
+      http:
+        http1MaxPendingRequests: 10
+        maxRequestsPerConnection: 2
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    loadBalancer:
+      simple: LEAST_CONN
+  subsets:
+  - name: v1
+    labels:
+      version: v1 

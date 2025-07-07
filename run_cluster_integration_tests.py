@@ -135,7 +135,7 @@ class PrerequisitesChecker:
     def check_python_dependencies(self) -> bool:
         """Check if required Python packages are available"""
         required_packages = [
-            "pytest", "requests", "pandas", "numpy", "pyyaml"
+            "pytest", "requests", "pandas", "numpy", "yaml"
         ]
         
         missing_packages = []
