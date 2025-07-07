@@ -1,0 +1,37 @@
+# Agent-specific gitignore
+
+# Data files (but keep the directory structure)
+data/*
+!data/.gitkeep
+
+# Secrets and config files
+fastagent.secrets.yaml
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Agent logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp 

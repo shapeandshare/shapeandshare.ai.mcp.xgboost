@@ -1,0 +1,33 @@
+# Dockerfile for XGBoost Fast-Agent Environment
+FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast Python package management
+RUN pip install uv
+
+# Copy requirements and install Python dependencies
+COPY agent/requirements.txt /app/agent/requirements.txt
+RUN uv pip install --system -r /app/agent/requirements.txt
+
+# Copy agent code
+COPY agent/ /app/agent/
+
+# Set Python path
+ENV PYTHONPATH=/app/agent
+
+# Create directory for data
+RUN mkdir -p /app/data
+
+# Set working directory to agent
+WORKDIR /app/agent
+
+# Default command
+CMD ["python", "agent.py"] 
