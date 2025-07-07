@@ -1,0 +1,36 @@
+name: mcp-xgboost-development
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.12.11
+  - httpx
+  - pip
+  
+  # XGBoost and ML dependencies
+  - xgboost
+  - pandas
+  - numpy
+  - scikit-learn
+  
+  - pip:
+    - fastmcp>=2.0.0
+    - pydantic>=2.0.0
+    - uvicorn
+    - fastapi
+    - starlette
+    - requests
+
+# Development
+  - pylint
+  - isort
+  - black
+  - flake8
+  - mypy
+  - autopep8
+  - bandit
+  - coverage
+  - pytest
+  - pytest-cov
+  - pytest-asyncio
+

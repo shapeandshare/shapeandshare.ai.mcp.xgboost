@@ -1,0 +1,58 @@
+# Development-optimized Dockerfile for k3d
+# This is a lighter version optimized for local development
+FROM python:3.12-slim
+
+# Install system dependencies (minimal for development)
+RUN apt-get update && apt-get install -y \
+    curl \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY environments/development.yml ./
+
+# Install conda (use miniconda for smaller size)
+RUN curl -o ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+    chmod +x ~/miniconda.sh && \
+    ~/miniconda.sh -b -p /opt/conda && \
+    rm ~/miniconda.sh
+
+# Add conda to path
+ENV PATH=/opt/conda/bin:$PATH
+
+# Create conda environment
+RUN conda env create -f development.yml -p /opt/conda/envs/mcp-xgboost && \
+    conda clean -afy
+
+# Set environment path
+ENV PATH=/opt/conda/envs/mcp-xgboost/bin:$PATH
+
+# Copy application code
+COPY src/ ./src/
+COPY pyproject.toml ./
+
+# Create app user for security
+RUN useradd --create-home --shell /bin/bash app && \
+    chown -R app:app /app
+
+# Switch to app user
+USER app
+
+# Environment variables
+ENV MCP_HOST=0.0.0.0
+ENV MCP_PORT=8000
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Expose port
+EXPOSE 8000
+
+# Simple health check for development
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Development command with reload support
+CMD ["python", "-m", "src.app"] 

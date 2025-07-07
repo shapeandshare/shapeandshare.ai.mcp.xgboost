@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "xgboost": {
+      "command": "python",
+      "args": ["-m", "mcp", "client", "http://localhost:8000/mcp/"],
+      "env": {
+        "PATH": "/usr/local/bin:/usr/bin:/bin"
+      }
+    }
+  }
+} 
