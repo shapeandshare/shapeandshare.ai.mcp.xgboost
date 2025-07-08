@@ -13,6 +13,12 @@ dependencies:
   - numpy
   - scikit-learn
   
+  # Redis for distributed storage
+  - redis-py
+  
+  # System monitoring for health checks
+  - psutil
+  
   - pip:
     - fastmcp>=2.0.0
     - pydantic>=2.0.0

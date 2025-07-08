@@ -23,6 +23,8 @@ LoggingConfig
     Logging and monitoring configuration
 StorageConfig
     Data storage and model persistence configuration
+RedisConfig
+    Redis configuration for distributed model storage
 AppConfig
     Main application configuration container
 
@@ -229,6 +231,8 @@ class StorageConfig(BaseModel):
         Automatically save models after training
     compression : bool
         Enable compression for stored models
+    storage_backend : str
+        Storage backend type ('file' or 'redis')
     """
 
     model_storage_path: str = Field(default="./models", description="Model storage path")
@@ -236,6 +240,7 @@ class StorageConfig(BaseModel):
     enable_model_persistence: bool = Field(default=True, description="Enable model persistence")
     auto_save_models: bool = Field(default=True, description="Auto-save models after training")
     compression: bool = Field(default=True, description="Enable model compression")
+    storage_backend: str = Field(default="file", description="Storage backend type ('file' or 'redis')")
 
     @field_validator("model_storage_path", "data_storage_path")
     @classmethod
@@ -246,6 +251,58 @@ class StorageConfig(BaseModel):
         if not path.is_dir():
             raise ValueError(f"Cannot create or access directory: {v}")
         return str(path.absolute())
+
+    @field_validator("storage_backend")
+    @classmethod
+    def validate_storage_backend(cls, v):
+        """Validate storage backend type."""
+        if v not in ["file", "redis"]:
+            raise ValueError("Storage backend must be 'file' or 'redis'")
+        return v
+
+
+class RedisConfig(BaseModel):
+    """Redis configuration for distributed model storage.
+
+    Attributes
+    ----------
+    host : str
+        Redis host address
+    port : int
+        Redis port number
+    password : Optional[str]
+        Redis password
+    database : int
+        Redis database number
+    max_connections : int
+        Maximum number of connections in the pool
+    socket_timeout : int
+        Socket timeout in seconds
+    socket_connect_timeout : int
+        Socket connect timeout in seconds
+    retry_on_timeout : bool
+        Retry on timeout
+    health_check_interval : int
+        Health check interval in seconds
+    """
+
+    host: str = Field(default="localhost", description="Redis host address")
+    port: int = Field(default=6379, ge=1, le=65535, description="Redis port number")
+    password: Optional[str] = Field(default=None, description="Redis password")
+    database: int = Field(default=0, ge=0, le=15, description="Redis database number")
+    max_connections: int = Field(default=10, ge=1, description="Maximum connections in pool")
+    socket_timeout: int = Field(default=5, ge=1, description="Socket timeout in seconds")
+    socket_connect_timeout: int = Field(default=5, ge=1, description="Socket connect timeout in seconds")
+    retry_on_timeout: bool = Field(default=True, description="Retry on timeout")
+    health_check_interval: int = Field(default=30, ge=1, description="Health check interval in seconds")
+
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, v):
+        """Validate Redis host address."""
+        if not v or not v.strip():
+            raise ValueError("Redis host cannot be empty")
+        return v.strip()
 
 
 class AppConfig(BaseModel):
@@ -263,6 +320,8 @@ class AppConfig(BaseModel):
         Logging configuration
     storage : StorageConfig
         Storage configuration
+    redis : RedisConfig
+        Redis configuration
     app_name : str
         Application name
     version : str
@@ -274,6 +333,7 @@ class AppConfig(BaseModel):
     resources: ResourceConfig = Field(default_factory=ResourceConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    redis: RedisConfig = Field(default_factory=RedisConfig)
     app_name: str = Field(default="mcp-xgboost", description="Application name")
     version: str = Field(default="1.0.0", description="Application version")
 
@@ -348,6 +408,18 @@ def load_config() -> AppConfig:
     config.storage.enable_model_persistence = os.getenv("MCP_ENABLE_MODEL_PERSISTENCE", "true").lower() == "true"
     config.storage.auto_save_models = os.getenv("MCP_AUTO_SAVE_MODELS", "true").lower() == "true"
     config.storage.compression = os.getenv("MCP_COMPRESSION", "true").lower() == "true"
+    config.storage.storage_backend = os.getenv("MCP_STORAGE_BACKEND", config.storage.storage_backend)
+
+    # Load Redis configuration
+    config.redis.host = os.getenv("MCP_REDIS_HOST", config.redis.host)
+    config.redis.port = int(os.getenv("MCP_REDIS_PORT", config.redis.port))
+    config.redis.password = os.getenv("MCP_REDIS_PASSWORD", config.redis.password)
+    config.redis.database = int(os.getenv("MCP_REDIS_DATABASE", config.redis.database))
+    config.redis.max_connections = int(os.getenv("MCP_REDIS_MAX_CONNECTIONS", config.redis.max_connections))
+    config.redis.socket_timeout = int(os.getenv("MCP_REDIS_SOCKET_TIMEOUT", config.redis.socket_timeout))
+    config.redis.socket_connect_timeout = int(os.getenv("MCP_REDIS_SOCKET_CONNECT_TIMEOUT", config.redis.socket_connect_timeout))
+    config.redis.retry_on_timeout = os.getenv("MCP_REDIS_RETRY_ON_TIMEOUT", "true").lower() == "true"
+    config.redis.health_check_interval = int(os.getenv("MCP_REDIS_HEALTH_CHECK_INTERVAL", config.redis.health_check_interval))
 
     # Load application metadata
     config.app_name = os.getenv("MCP_APP_NAME", config.app_name)

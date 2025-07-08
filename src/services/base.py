@@ -525,48 +525,55 @@ class PersistenceMixin:
     """Mixin for model persistence capabilities.
 
     This mixin provides common model persistence functionality
-    that can be used by ML services.
+    that can be used by ML services. It uses shared storage
+    to support distributed deployments.
     """
 
     def __init__(self, *args, **kwargs):
         """Initialize persistence mixin."""
         super().__init__(*args, **kwargs)
-        self._models = {}  # In-memory model storage
+        # Use shared storage instead of in-memory storage
+        from ..persistence import ModelStorage
+        self._storage = ModelStorage()
 
     def _store_model(self, name: str, model: Any, metadata: Optional[Dict[str, Any]] = None):
-        """Store a model in memory."""
-        self._models[name] = {
-            "model": model,
-            "metadata": metadata or {},
-            "created_at": datetime.utcnow(),
-            "access_count": 0,
-        }
+        """Store a model in shared storage."""
+        self._storage.save_model(name, model, metadata)
 
     def _retrieve_model(self, name: str) -> Optional[Any]:
-        """Retrieve a model from memory."""
-        if name in self._models:
-            self._models[name]["access_count"] += 1
-            return self._models[name]["model"]
-        return None
+        """Retrieve a model from shared storage."""
+        try:
+            model, metadata = self._storage.load_model(name)
+            return model
+        except Exception:
+            return None
 
     def _delete_model(self, name: str) -> bool:
-        """Delete a model from memory."""
-        if name in self._models:
-            del self._models[name]
-            return True
-        return False
+        """Delete a model from shared storage."""
+        try:
+            return self._storage.delete_model(name)
+        except Exception:
+            return False
 
     def _list_models(self) -> List[Dict[str, Any]]:
-        """List all models in memory."""
-        return [
-            {
-                "name": name,
-                "metadata": info["metadata"],
-                "created_at": info["created_at"],
-                "access_count": info["access_count"],
-            }
-            for name, info in self._models.items()
-        ]
+        """List all models in shared storage."""
+        try:
+            models_metadata = self._storage.list_models()
+            return [
+                {
+                    "name": metadata.name,
+                    "metadata": {
+                        "description": metadata.description,
+                        "model_type": metadata.model_type,
+                        "version": metadata.version,
+                    },
+                    "created_at": metadata.created_at,
+                    "access_count": 0,  # Not tracked in shared storage
+                }
+                for metadata in models_metadata
+            ]
+        except Exception:
+            return []
 
 
 class MetricsMixin:

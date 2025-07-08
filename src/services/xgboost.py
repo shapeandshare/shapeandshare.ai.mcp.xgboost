@@ -46,6 +46,7 @@ import xgboost as xgb
 from fastmcp import FastMCP
 
 from ..utils import format_feature_importance, format_model_info, validate_data
+from ..persistence import ModelNotFoundError
 
 
 class XGBoostService:
@@ -53,7 +54,7 @@ class XGBoostService:
 
     This service provides comprehensive XGBoost functionality through MCP tools,
     enabling AI assistants to train models, make predictions, and analyze results.
-    It maintains a registry of trained models and provides robust error handling.
+    It uses shared storage for model persistence to support distributed deployments.
 
     Parameters
     ----------
@@ -64,8 +65,8 @@ class XGBoostService:
     ----------
     _mcp : FastMCP
         Reference to the MCP server instance
-    _models : Dict[str, xgb.XGBModel]
-        Dictionary storing trained models by name
+    _storage : ModelStorage
+        Shared storage instance for model persistence
 
     Methods
     -------
@@ -92,8 +93,8 @@ class XGBoostService:
     Notes
     -----
     The service automatically registers all tools with the MCP server during
-    initialization. Models are stored in memory and persist for the lifetime
-    of the service instance.
+    initialization. Models are stored in shared storage (file-based or Redis)
+    to support distributed deployments in Kubernetes.
 
     All methods include comprehensive error handling and return user-friendly
     error messages rather than raising exceptions.
@@ -103,6 +104,7 @@ class XGBoostService:
     xgboost.XGBRegressor : XGBoost regression model
     xgboost.XGBClassifier : XGBoost classification model
     fastmcp.FastMCP : FastMCP server framework
+    src.persistence.ModelStorage : Model storage backend
     """
 
     def __init__(self, mcp: FastMCP):
@@ -114,7 +116,9 @@ class XGBoostService:
             The MCP server instance to register tools with
         """
         self._mcp = mcp
-        self._models: Dict[str, xgb.XGBModel] = {}
+        # Use shared storage instead of in-memory storage
+        from ..persistence import ModelStorage
+        self._storage = ModelStorage()
         # Register tools using FastMCP 2.0 decorator syntax
         self._register_tools()
 
@@ -350,7 +354,7 @@ class XGBoostService:
             model.fit(X, y)
 
             # Store the model
-            self._models[model_name] = model
+            self._storage.save_model(model_name, model, metadata={"description": f"{model_type} model"})
 
             return (
                 f"Model '{model_name}' trained successfully!\n"
@@ -383,8 +387,12 @@ class XGBoostService:
         and formats prediction results in a user-friendly manner.
         """
         try:
-            if model_name not in self._models:
-                available_models = list(self._models.keys())
+            # Check if model exists by trying to load it
+            try:
+                model, metadata = self._storage.load_model(model_name)
+            except ModelNotFoundError:
+                models = self._storage.list_models()
+                available_models = [m.name for m in models]
                 return f"Model '{model_name}' not found. Available models: {available_models}"
 
             # Parse the data
@@ -392,7 +400,6 @@ class XGBoostService:
             df = pd.DataFrame(data_dict)
 
             # Make predictions
-            model = self._models[model_name]
             predictions = model.predict(df)
 
             # Format results
@@ -424,11 +431,14 @@ class XGBoostService:
         a comprehensive model information string.
         """
         try:
-            if model_name not in self._models:
-                available_models = list(self._models.keys())
+            # Check if model exists by trying to load it
+            try:
+                model, metadata = self._storage.load_model(model_name)
+            except ModelNotFoundError:
+                models = self._storage.list_models()
+                available_models = [m.name for m in models]
                 return f"Model '{model_name}' not found. Available models: {available_models}"
 
-            model = self._models[model_name]
             return format_model_info(model_name, model)
 
         except (AttributeError, ValueError) as e:
@@ -453,11 +463,14 @@ class XGBoostService:
         a ranked list of feature importance values.
         """
         try:
-            if model_name not in self._models:
-                available_models = list(self._models.keys())
+            # Check if model exists by trying to load it
+            try:
+                model, metadata = self._storage.load_model(model_name)
+            except ModelNotFoundError:
+                models = self._storage.list_models()
+                available_models = [m.name for m in models]
                 return f"Model '{model_name}' not found. Available models: {available_models}"
 
-            model = self._models[model_name]
             return format_feature_importance(model)
 
         except (AttributeError, ValueError) as e:
@@ -474,18 +487,24 @@ class XGBoostService:
 
         Notes
         -----
-        Automatically detects model types by checking for classification-specific
-        methods like predict_proba.
+        Uses the storage backend to list models and automatically detects 
+        model types from metadata or by loading the model.
         """
-        if not self._models:
-            return "No models have been trained yet."
+        try:
+            models = self._storage.list_models()
+            if not models:
+                return "No models have been trained yet."
 
-        model_list = []
-        for name, model in self._models.items():
-            model_type = "Classification" if hasattr(model, "predict_proba") else "Regression"
-            model_list.append(f"- {name} ({model_type})")
+            model_list = []
+            for model_metadata in models:
+                model_name = model_metadata.name
+                model_type = model_metadata.model_type.title()
+                model_list.append(f"- {model_name} ({model_type})")
 
-        return "Available models:\n" + "\n".join(model_list)
+            return "Available models:\n" + "\n".join(model_list)
+        
+        except Exception as e:
+            return f"Error listing models: {str(e)}"
 
     @property
     def mcp(self) -> FastMCP:
