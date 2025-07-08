@@ -6,7 +6,7 @@ to increase coverage from 0% to 60% target.
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 from unittest.mock import Mock, patch, AsyncMock
 
 import pytest
@@ -477,7 +477,8 @@ class TestPersistenceMixin:
             pass
 
         obj = TestClass()
-        assert obj._models == {}
+        assert hasattr(obj, '_storage')
+        assert obj._storage is not None
 
     def test_persistence_mixin_store_model(self):
         """Test _store_model method."""
@@ -486,13 +487,10 @@ class TestPersistenceMixin:
 
         obj = TestClass()
         
-        obj._store_model("test_model", "model_data", {"type": "test"})
-        
-        assert "test_model" in obj._models
-        assert obj._models["test_model"]["model"] == "model_data"
-        assert obj._models["test_model"]["metadata"] == {"type": "test"}
-        assert obj._models["test_model"]["access_count"] == 0
-        assert isinstance(obj._models["test_model"]["created_at"], datetime)
+        # Mock the storage to avoid actual persistence
+        with patch.object(obj._storage, 'save_model') as mock_save:
+            obj._store_model("test_model", "model_data", {"type": "test"})
+            mock_save.assert_called_once_with("test_model", "model_data", {"type": "test"})
 
     def test_persistence_mixin_retrieve_model(self):
         """Test _retrieve_model method."""
@@ -501,17 +499,20 @@ class TestPersistenceMixin:
 
         obj = TestClass()
         
-        # Store a model first
-        obj._store_model("test_model", "model_data")
+        # Mock successful retrieval
+        with patch.object(obj._storage, 'load_model') as mock_load:
+            mock_load.return_value = ("model_data", Mock())
+            
+            model = obj._retrieve_model("test_model")
+            assert model == "model_data"
+            mock_load.assert_called_once_with("test_model")
         
-        # Retrieve the model
-        model = obj._retrieve_model("test_model")
-        assert model == "model_data"
-        assert obj._models["test_model"]["access_count"] == 1
-        
-        # Retrieve non-existent model
-        model = obj._retrieve_model("non_existent")
-        assert model is None
+        # Mock failed retrieval
+        with patch.object(obj._storage, 'load_model') as mock_load:
+            mock_load.side_effect = Exception("Model not found")
+            
+            model = obj._retrieve_model("non_existent")
+            assert model is None
 
     def test_persistence_mixin_delete_model(self):
         """Test _delete_model method."""
@@ -520,17 +521,20 @@ class TestPersistenceMixin:
 
         obj = TestClass()
         
-        # Store a model first
-        obj._store_model("test_model", "model_data")
+        # Mock successful deletion
+        with patch.object(obj._storage, 'delete_model') as mock_delete:
+            mock_delete.return_value = True
+            
+            result = obj._delete_model("test_model")
+            assert result is True
+            mock_delete.assert_called_once_with("test_model")
         
-        # Delete the model
-        result = obj._delete_model("test_model")
-        assert result is True
-        assert "test_model" not in obj._models
-        
-        # Delete non-existent model
-        result = obj._delete_model("non_existent")
-        assert result is False
+        # Mock failed deletion
+        with patch.object(obj._storage, 'delete_model') as mock_delete:
+            mock_delete.side_effect = Exception("Delete failed")
+            
+            result = obj._delete_model("non_existent")
+            assert result is False
 
     def test_persistence_mixin_list_models(self):
         """Test _list_models method."""
@@ -539,17 +543,39 @@ class TestPersistenceMixin:
 
         obj = TestClass()
         
-        # Store multiple models
-        obj._store_model("model1", "data1", {"type": "regression"})
-        obj._store_model("model2", "data2", {"type": "classification"})
+        # Create mock metadata objects
+        mock_metadata1 = Mock()
+        mock_metadata1.name = "model1"
+        mock_metadata1.description = "First model"
+        mock_metadata1.model_type = "regression"
+        mock_metadata1.version = 1
+        mock_metadata1.created_at = datetime.now(UTC)
         
-        models = obj._list_models()
+        mock_metadata2 = Mock()
+        mock_metadata2.name = "model2"
+        mock_metadata2.description = "Second model"
+        mock_metadata2.model_type = "classification"
+        mock_metadata2.version = 2
+        mock_metadata2.created_at = datetime.now(UTC)
         
-        assert len(models) == 2
-        assert models[0]["name"] == "model1"
-        assert models[0]["metadata"] == {"type": "regression"}
-        assert models[1]["name"] == "model2"
-        assert models[1]["metadata"] == {"type": "classification"}
+        # Mock successful listing
+        with patch.object(obj._storage, 'list_models') as mock_list:
+            mock_list.return_value = [mock_metadata1, mock_metadata2]
+            
+            models = obj._list_models()
+            
+            assert len(models) == 2
+            assert models[0]["name"] == "model1"
+            assert models[0]["metadata"]["model_type"] == "regression"
+            assert models[1]["name"] == "model2"
+            assert models[1]["metadata"]["model_type"] == "classification"
+        
+        # Mock failed listing
+        with patch.object(obj._storage, 'list_models') as mock_list:
+            mock_list.side_effect = Exception("List failed")
+            
+            models = obj._list_models()
+            assert models == []
 
 
 class TestMetricsMixin:

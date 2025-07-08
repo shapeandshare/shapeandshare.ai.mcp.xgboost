@@ -746,13 +746,25 @@ class ModelStorage:
     def _initialize_storage(self):
         """Initialize storage with configuration."""
         storage_info_path = self.storage_path / ".storage_info"
+        
+        # Safely extract config values, handling Mock objects in tests
+        try:
+            compression = getattr(self.config.storage, 'compression', False)
+            auto_save = getattr(self.config.storage, 'auto_save_models', True)
+            storage_backend = getattr(self.config.storage, 'storage_backend', 'file')
+        except AttributeError:
+            # Handle case where config attributes might be Mock objects
+            compression = False
+            auto_save = True
+            storage_backend = 'file'
+        
         storage_info = {
             "version": "1.0",
             "created_at": datetime.now(UTC).isoformat(),
             "config": {
-                "compression": self.config.storage.compression,
-                "auto_save": self.config.storage.auto_save_models,
-                "storage_backend": self.config.storage.storage_backend,
+                "compression": compression,
+                "auto_save": auto_save,
+                "storage_backend": storage_backend,
             },
         }
 

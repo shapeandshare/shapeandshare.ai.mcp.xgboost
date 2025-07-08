@@ -299,12 +299,10 @@ class XGBoostService:
         data: str,
         target_column: str,
         model_type: str,
+        overwrite: bool = False,
         **kwargs: Any,
     ) -> str:
         """Implementation for training an XGBoost model.
-
-        This method handles the actual model training logic, including data
-        validation, model creation, training, and storage.
 
         Parameters
         ----------
@@ -313,11 +311,13 @@ class XGBoostService:
         data : str
             JSON string containing training data
         target_column : str
-            Name of the target column
+            Name of the target column in the data
         model_type : str
-            Type of model ("regression" or "classification")
+            Type of model to train ('regression' or 'classification')
+        overwrite : bool, optional
+            Whether to overwrite existing model (default: False)
         **kwargs : Any
-            Additional parameters for XGBoost model initialization
+            Additional parameters to pass to XGBoost model
 
         Returns
         -------
@@ -354,7 +354,7 @@ class XGBoostService:
             model.fit(X, y)
 
             # Store the model
-            self._storage.save_model(model_name, model, metadata={"description": f"{model_type} model"})
+            self._storage.save_model(model_name, model, metadata={"description": f"{model_type} model"}, overwrite=overwrite)
 
             return (
                 f"Model '{model_name}' trained successfully!\n"
