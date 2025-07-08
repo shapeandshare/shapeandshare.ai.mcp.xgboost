@@ -62,7 +62,7 @@ dev-setup: ## Create development infrastructure (k3d + Istio + Dashboard + names
 	fi
 	
 	@# Step 1: Create k3d cluster
-	@$(call print_dev_status,$(BLUE),📦 Step 1/5: Creating k3d cluster...)
+	@$(call print_dev_status,$(BLUE),📦 Step 1/6: Creating k3d cluster...)
 	@if [ "$(CLUSTER_STATUS)" = "stopped" ]; then \
 		k3d cluster start $(DEV_CLUSTER_NAME); \
 	else \
@@ -71,33 +71,45 @@ dev-setup: ## Create development infrastructure (k3d + Istio + Dashboard + names
 	@$(call print_dev_status,$(GREEN),✅ k3d cluster ready!)
 	
 	@# Step 2: Install Istio using modern istioctl install
-	@$(call print_dev_status,$(BLUE),🕸️  Step 2/5: Installing Istio service mesh...)
+	@$(call print_dev_status,$(BLUE),🕸️  Step 2/6: Installing Istio service mesh...)
 	@$(call install_istioctl)
 	@$(call print_dev_status,$(BLUE),🔧 Installing Istio $(ISTIO_VERSION)...)
 	@if [ -f ./istioctl ]; then \
-		./istioctl install --set values.global.istioNamespace=istio-system --filename k8s/istio-config.yaml --skip-confirmation --quiet; \
+		./istioctl install --set values.global.istioNamespace=istio-system --filename k8s/istio-config.yaml --skip-confirmation >/dev/null 2>&1; \
 	else \
-		istioctl install --set values.global.istioNamespace=istio-system --filename k8s/istio-config.yaml --skip-confirmation --quiet; \
+		istioctl install --set values.global.istioNamespace=istio-system --filename k8s/istio-config.yaml --skip-confirmation >/dev/null 2>&1; \
 	fi
 	@$(call print_dev_status,$(BLUE),⏳ Waiting for Istio control plane...)
 	@kubectl wait --for=condition=ready pod -l app=istiod -n istio-system --timeout=300s >/dev/null 2>&1
 	@$(call print_dev_status,$(GREEN),✅ Istio service mesh installed!)
 	
 	@# Step 3: Install Kubernetes Dashboard
-	@$(call print_dev_status,$(BLUE),📊 Step 3/5: Installing Kubernetes Dashboard...)
+	@$(call print_dev_status,$(BLUE),📊 Step 3/6: Installing Kubernetes Dashboard...)
 	@kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml >/dev/null 2>&1
 	@kubectl create serviceaccount admin-user -n $(DASHBOARD_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
 	@kubectl create clusterrolebinding admin-user --clusterrole=cluster-admin --serviceaccount=$(DASHBOARD_NAMESPACE):admin-user --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
 	@$(call print_dev_status,$(GREEN),✅ Dashboard installed!)
 	
 	@# Step 4: Setup application namespace with Istio injection
-	@$(call print_dev_status,$(BLUE),🏗️  Step 4/5: Setting up application namespace...)
+	@$(call print_dev_status,$(BLUE),🏗️  Step 4/6: Setting up application namespace...)
 	@kubectl create namespace $(DEV_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
 	@kubectl label namespace $(DEV_NAMESPACE) istio-injection=enabled --overwrite >/dev/null 2>&1
 	@$(call print_dev_status,$(GREEN),✅ Application namespace ready with Istio injection!)
 	
-	@# Step 5: Wait for components to be ready
-	@$(call print_dev_status,$(BLUE),⏳ Step 5/5: Waiting for components to be ready...)
+	@# Step 5: Configure Istio Gateway and networking
+	@$(call print_dev_status,$(BLUE),🌐 Step 5/6: Configuring Istio Gateway...)
+	@if [ -f k8s/istio-gateway.yaml ]; then \
+		kubectl apply -f k8s/istio-gateway.yaml >/dev/null 2>&1; \
+		$(call print_dev_status,$(GREEN),✅ Istio Gateway configured!); \
+	else \
+		$(call print_dev_status,$(YELLOW),⚠️  k8s/istio-gateway.yaml not found - Gateway will be configured during app deployment); \
+	fi
+	@$(call print_dev_status,$(BLUE),🔧 Configuring Istio ingress gateway for external access...)
+	@kubectl patch svc istio-ingressgateway -n istio-system -p '{"spec":{"type":"NodePort","ports":[{"port":80,"nodePort":30080,"name":"http2","protocol":"TCP","targetPort":8080},{"port":443,"nodePort":30443,"name":"https","protocol":"TCP","targetPort":8443},{"port":15021,"nodePort":30229,"name":"status-port","protocol":"TCP","targetPort":15021}]}}' >/dev/null 2>&1
+	@$(call print_dev_status,$(GREEN),✅ Istio networking configured!)
+	
+	@# Step 6: Wait for components to be ready
+	@$(call print_dev_status,$(BLUE),⏳ Step 6/6: Waiting for components to be ready...)
 	@kubectl wait --for=condition=ready pod -l k8s-app=kubernetes-dashboard -n $(DASHBOARD_NAMESPACE) --timeout=120s >/dev/null 2>&1 || true
 	@kubectl wait --for=condition=ready pod -l app=istio-ingressgateway -n istio-system --timeout=120s >/dev/null 2>&1 || true
 	@$(call print_dev_status,$(GREEN),✅ All components ready!)
@@ -174,27 +186,35 @@ dev-access: ## Access dashboard and get service information
 	fi
 	@echo ""
 	
-	@# Application access
-	@$(call print_dev_status,$(CYAN),📱 Application Access:)
+	@# Application access via Istio Gateway
+	@$(call print_dev_status,$(CYAN),🌐 Application Access via Istio Gateway:)
 	@SERVICE_NAME=$$(kubectl get svc -n $(DEV_NAMESPACE) -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo ""); \
-	if [ -n "$$SERVICE_NAME" ]; then \
-		echo "  🎯 Direct access: kubectl port-forward -n $(DEV_NAMESPACE) svc/$$SERVICE_NAME 8081:8000"; \
-		echo "  🏥 Health check: curl http://localhost:8081/health (after port-forward)"; \
+	ISTIO_GW=$$(kubectl get svc -n istio-system istio-ingressgateway -o jsonpath='{.metadata.name}' 2>/dev/null || echo ""); \
+	if [ -n "$$SERVICE_NAME" ] && [ -n "$$ISTIO_GW" ]; then \
+		echo "  🎯 Primary access: http://localhost:30080"; \
+		echo "  🏥 Health check: curl http://localhost:30080/health"; \
+		echo "  🔧 MCP endpoint: curl http://localhost:30080/mcp"; \
+		echo "  🚀 Run tests: CLUSTER_URL=http://localhost:30080 python run_cluster_integration_tests.py --suite basic"; \
+	elif [ -n "$$SERVICE_NAME" ]; then \
+		echo "  📝 Application deployed but Gateway not configured."; \
+		echo "  🛠️  Configure Gateway: kubectl apply -f k8s/istio-gateway.yaml"; \
+		echo "  🔄 Alternative: kubectl port-forward -n $(DEV_NAMESPACE) svc/$$SERVICE_NAME 8081:8000"; \
 	else \
 		echo "  📝 No application deployed yet."; \
-		echo "  🚀 Deploy your app to namespace: $(DEV_NAMESPACE)"; \
+		echo "  🚀 Deploy your app: make app-deploy"; \
 	fi
 	@echo ""
 	
 	@# Istio access
-	@$(call print_dev_status,$(CYAN),🕸️  Istio Service Mesh Access:)
+	@$(call print_dev_status,$(CYAN),🕸️  Istio Service Mesh Status:)
 	@ISTIO_GW=$$(kubectl get svc -n istio-system istio-ingressgateway -o jsonpath='{.metadata.name}' 2>/dev/null || echo ""); \
 	if [ -n "$$ISTIO_GW" ]; then \
-		echo "  🌐 Istio Gateway: kubectl port-forward -n istio-system svc/istio-ingressgateway 8080:80"; \
-		echo "  🔒 Istio Gateway (HTTPS): kubectl port-forward -n istio-system svc/istio-ingressgateway 8443:443"; \
+		echo "  ✅ Istio Gateway: Ready (NodePort 30080)"; \
+		echo "  🔒 HTTPS Gateway: Available (NodePort 30443)"; \
 		echo "  📊 Istio status: kubectl get pods -n istio-system"; \
+		echo "  🌐 Gateway config: kubectl get gateway,virtualservice -n $(DEV_NAMESPACE)"; \
 	else \
-		echo "  ❌ Istio Gateway not found. Check Istio installation."; \
+		echo "  ❌ Istio Gateway not found. Run 'make dev-setup' to install."; \
 	fi
 	@echo ""
 	
