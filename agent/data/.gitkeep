@@ -1,2 +1,0 @@
-# This file ensures the data directory is created in git
-# The actual data files are ignored but the directory structure is preserved 

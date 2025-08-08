@@ -26,7 +26,7 @@ standard MCP protocol endpoints and custom HTTP routes for additional
 functionality.
 
 The server is designed to be lightweight and efficient, suitable for
-deployment in various environments including Docker containers.
+deployment in various environments including local development and production setups.
 
 See Also
 --------
