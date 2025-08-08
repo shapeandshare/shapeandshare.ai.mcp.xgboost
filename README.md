@@ -371,17 +371,17 @@ sudo systemctl status mcp-xgboost
 └─────────────────┘
 ```
 
-### K3D with Istio Architecture
+### Local Development Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  External       │────│  Istio          │────│  MCP XGBoost    │
-│  Traffic        │    │  Gateway        │    │  Service        │
+│  MCP Client     │────│  HTTP/MCP       │────│  XGBoost        │
+│  (Claude)       │    │  Protocol       │    │  Service        │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                 │
                     ┌─────────────────┐
-                    │  Kubernetes     │
-                    │  Dashboard      │
+                    │  Local Python   │
+                    │  Environment    │
                     └─────────────────┘
 ```
 
@@ -557,9 +557,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **XGBoost Team**: For the excellent machine learning library
 - **FastMCP**: For the modern MCP server framework
-- **Istio Project**: For the comprehensive service mesh solution
-- **Kubernetes Community**: For the robust container orchestration platform
+- **Python Community**: For the excellent ecosystem and tools
 
 ---
 
-**🚀 Ready to get started?** Run `make dev-setup` and start training models with Claude Desktop!
+**🚀 Ready to get started?** Run `make install && make run` and start training models with Claude Desktop!
