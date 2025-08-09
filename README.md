@@ -45,7 +45,7 @@ git clone <repository-url>
 cd mcp-xgboost
 
 # Install dependencies
-make install
+make setup
 
 # Run the application
 make run

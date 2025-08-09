@@ -1,11 +1,11 @@
 {
   "mcpServers": {
     "xgboost": {
-      "command": "python",
-      "args": ["-m", "mcp", "client", "http://localhost:8000/mcp/"],
+      "command": "make",
+      "args": ["-C", "/Users/joshburt/Workbench/Repositories/shapeandshare.ai.mcp.xgboost", "run"],
       "env": {
-        "PATH": "/usr/local/bin:/usr/bin:/bin"
+        "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
       }
     }
   }
-} 
+}
